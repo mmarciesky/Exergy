@@ -77,4 +77,4 @@ Standard Molar Chemical Exergy: A New Accurate Model.
 Energy, 2017, 121, 384–394.
 https://doi.org/10.1016/j.energy.2017.01.010
 
-This project was developed for PFAS-related computational chemistry work in the Ng lab, University of Pittsburgh.
+This project was developed for PFAS-related computational chemistry work in the Ng lab, University of Pittsburgh Pittsburgh, PA, USA.
