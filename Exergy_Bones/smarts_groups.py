@@ -2,7 +2,7 @@
 
 from rdkit import Chem
 from typing import Callable, Optional, List
-
+import pandas as pd
 
 class SMARTSGroup:
     def __init__(
@@ -14,6 +14,8 @@ class SMARTSGroup:
         filter_func: Optional[Callable] = None,
         extra_count: Optional[Callable] = None,
         binary: bool = False,
+        padelcol: str = '',
+        padelfp: str = '',        
     ):
         self.name = name
         self.smarts = smarts
@@ -23,8 +25,10 @@ class SMARTSGroup:
         self.filter_func = filter_func
         self.extra_count = extra_count
         self.binary = binary
+        self.padelcol = padelcol
+        self.padelfp = padelfp
 
-    def count_in_molecule(self, mol: Chem.Mol) -> int:
+    def count_in_molecule(self, mol: Chem.Mol,padelcount: pd.DataFrame,padelhit: pd.DataFrame) -> int:
         """
         Generic counter:
         - finds base SMARTS matches
@@ -34,24 +38,34 @@ class SMARTSGroup:
         """
         if self.pattern is None:
             raise ValueError(f"Invalid SMARTS pattern: {self.smarts}")
+        # 0. check if calculated by padel
+        if not pd.isnull(self.padelcol): #padelcount,padelhit
+            
+            if self.padelfp == 'AtomPairs2DCount':
+                base_count = int(padelcount[self.padelcol].values[0])
+            elif self.padelfp == 'AtomPairs2D':
+                base_count = int(padelhit[self.padelcol].values[0])
+            else:
+                raise ValueError(f"Invalid fingerprint name")
+        else:
+            # 1. base SMARTS matches
+            matches = mol.GetSubstructMatches(self.pattern)
 
-        # 1. base SMARTS matches
-        matches = mol.GetSubstructMatches(self.pattern)
+            # 2. optional per-match filter
+            if self.filter_func:
 
-        # 2. optional per-match filter
-        if self.filter_func:
-            matches = [m for m in matches if self.filter_func(mol, m)]
+                matches = [m for m in matches if self.filter_func(mol, m)]
 
-        base_count = len(matches)
+            base_count = len(matches)
 
-        # 3. optional extra group-level logic (can add to the count)
-        if self.extra_count:
-            extra = self.extra_count(mol)
-            return base_count + int(extra)
+            # 3. optional extra group-level logic (can add to the count)
+            if self.extra_count:
+                extra = self.extra_count(mol)
+                return base_count + int(extra)
 
-        # 4. optional binary behavior
-        if self.binary and base_count > 1:
-            base_count = 1
+            # 4. optional binary behavior
+            if self.binary and base_count > 1:
+                base_count = 1
 
         return base_count
 
@@ -210,19 +224,46 @@ class SMARTSGroup:
 
         # If we didn't violate the rule, this match is OK
         return True
+    
+
     @staticmethod
     def filtergroup_26(mol: Chem.Mol, match: tuple) -> bool:
-        smarts= ["[Cl][I,Br,Si,Cl,F,O,N]",
-        "[C;D4]([Cl])([O,N,S,F,Cl,Br,I])([O,N,S,F,Cl,Br,I])([O,N,S,F,Cl,Br,I])",
-        "[C](#*)([Cl])",
-        "[C;D3](Cl)(-[Cl,I,O,N,Br,S,Si,F])(=[!O;!N,!S])",
-        "[C;D3](Cl)(~[Cl,I,O,N,Br,S,Si,F])(~[Cl,I,O,N,Br,S,Si,F])"]
-        pattern = [Chem.MolFromSmarts(s) for s in smarts]
-        for smarts in pattern:
-            if mol.GetSubstructMatches(smarts):
-                return True
+        # Get atom indices
+        cl_idx = match[0]  # Chlorine atom
+        connected_idx = match[1]  # Atom connected to chlorine
+        
+        cl_atom = mol.GetAtomWithIdx(cl_idx)
+        connected_atom = mol.GetAtomWithIdx(connected_idx)
+        if connected_atom.GetSymbol() == 'C':
+            # Get hybridization
+            hybridization = connected_atom.GetHybridization()
+            hybridization_str = str(hybridization)
+            if hybridization_str != 'SP3':
+                neibhorcount = 1
+                for neighbor in connected_atom.GetNeighbors():
+                    if neighbor.GetIdx() == cl_idx:
+                        continue  # Skip the chlorine
+                    elif neighbor.GetSymbol() == 'C':
+                        neibhorcount += 0
+                    elif neighbor.GetSymbol() == 'H':  
+                        neibhorcount += -1 
+                    elif (neighbor.GetSymbol() == 'O')|(neighbor.GetSymbol() == 'S'):
+                        neibhorcount += 2
+                    elif (neighbor.GetSymbol() in ['F','Cl','Br','I']):
+                        neibhorcount += 1
+                if (neibhorcount > 1) & (hybridization_str == 'SP2'):
+                    return True
+                elif (neibhorcount == 1) & (hybridization_str == 'SP'):
+                    return True
+                elif (neibhorcount == 4) & (hybridization_str == 'SP'):
+                    return True
+                else:
+                    return False   
+            else:
+                return False
+        else:
+            return True    
 
-        return False
 
 class SMARTSCollection:
     """
@@ -241,6 +282,8 @@ class SMARTSCollection:
         filter_func: Optional[Callable] = None,
         extra_count: Optional[Callable] = None,
         binary: bool = False,
+        padelcol: str = '',
+        padelfp: str = '',
     ):
         """
         Create a SMARTSGroup and add it to the collection.
@@ -253,10 +296,12 @@ class SMARTSCollection:
             filter_func,
             extra_count,
             binary,
+            padelcol,
+            padelfp,
         )
         self.groups.append(group)
 
-    def analyze_smiles(self, smiles: str):
+    def analyze_smiles(self, smiles: str, padelcount: pd.DataFrame, padelhit: pd.DataFrame):
         """
         Analyze a SMILES string against all stored SMARTS groups.
         Returns a list of dicts: name, smarts, count, value_h, value_s
@@ -268,7 +313,7 @@ class SMARTSCollection:
 
         results = []
         for group in self.groups:
-            count = group.count_in_molecule(mol)
+            count = group.count_in_molecule(mol,padelcount,padelhit)
             results.append(
                 {
                     "name": group.name,

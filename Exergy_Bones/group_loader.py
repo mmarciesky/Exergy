@@ -68,6 +68,10 @@ def load_smarts_groups_from_excel(path: Optional[Path] = None) -> SMARTSCollecti
         else:
             binary_count = False  # better than None: explicit False
 
+        #column name in padel
+        padelcol = row.get("padelcol", '')
+        padelfp = row.get("padelfp", '')
+
         smarts_db.add_group(
             name=name,
             smarts=smarts,
@@ -76,6 +80,8 @@ def load_smarts_groups_from_excel(path: Optional[Path] = None) -> SMARTSCollecti
             filter_func=filter_func,
             extra_count=extra_count,
             binary=binary_count,
+            padelcol=padelcol,
+            padelfp = padelfp
         )
 
     return smarts_db
