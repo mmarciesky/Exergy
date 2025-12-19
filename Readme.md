@@ -51,9 +51,11 @@ Exergy_Project/
 │   └── raw/
 │       ├── True_set.xlsx                  # Original test database (as in publication)
 │       └── Test_sample_excel.xlsx         # Example input for run_exergy()
+│   └── various fingerprint files
 │
 ├── notebooks/
 │   └── group_tuning.ipynb                 # For debugging and tuning SMARTS groups
+│   └──group_with_fingerprints.ipynb # Testing the original database
 │
 └── README.md
 
@@ -77,4 +79,4 @@ Standard Molar Chemical Exergy: A New Accurate Model.
 Energy, 2017, 121, 384–394.
 https://doi.org/10.1016/j.energy.2017.01.010
 
-This project was developed for PFAS-related computational chemistry work in the Ng lab, University of Pittsburgh Pittsburgh, PA, USA.
+This project was developed for PFAS-related computational chemistry work in the Ng lab, University of Pittsburgh Pittsburgh, PA, USA by Dr. Joyce Li and Mel Marciesky
